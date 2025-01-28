@@ -1,0 +1,82 @@
+from setuptools import setup, find_packages
+
+setup(
+    name="acoular",
+    version=None,  # Version is dynamically handled by hatch
+    description="Python library for acoustic beamforming",
+    long_description=open("README.md").read(),
+    long_description_content_type="text/markdown",
+    author="Acoular Development Team",
+    author_email="info@acoular.org",
+    url="https://acoular.org",
+    license="BSD License",
+    classifiers=[
+        "Development Status :: 5 - Production/Stable",
+        "Intended Audience :: Education",
+        "Intended Audience :: Science/Research",
+        "Topic :: Scientific/Engineering :: Physics",
+        "License :: OSI Approved :: BSD License",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+    ],
+    keywords=[
+        "acoustics",
+        "beamforming",
+        "microphone array",
+    ],
+    python_requires=">=3.10,<3.13",
+    packages=find_packages(include=["acoular", "acoular.*"]),
+    include_package_data=True,
+    install_requires=[
+        "numpy",
+        "numba",
+        "scipy>=1.1.0",
+        "scikit-learn",
+        "tables",
+        "traits>=6.0",
+    ],
+    extras_require={
+        "full": [
+            "matplotlib",
+            "pylops",
+            "sounddevice",
+        ],
+        "docs": [
+            "ipython",
+            "graphviz",
+            "matplotlib",
+            "numpydoc",
+            "pickleshare",
+            "sounddevice",
+            "sphinx",
+            "sphinx_gallery",
+            "sphinxcontrib-bibtex",
+            "setuptools",  # still needed for sphinxcontrib-bibtex
+        ],
+        "tests": [
+            "pytest",
+            "pytest-mock",
+            "pytest-cov",
+            "pytest-regtest",
+            "pytest-cases",
+            "pytest-env",
+            "pytest-profiling",
+            "sounddevice",
+            "pylops",
+            "traitsui",
+            "h5py",
+            "PyYAML",
+        ],
+        "dev": [
+            "acoular[docs,full,tests]",
+            "hatch",
+            "ruff==0.8.1",
+        ],
+    },
+    project_urls={
+        "Homepage": "https://acoular.org",
+        "Documentation": "https://acoular.org",
+        "Repository": "https://github.com/acoular/acoular",
+    },
+)
