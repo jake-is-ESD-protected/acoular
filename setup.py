@@ -25,7 +25,7 @@ setup(
         "beamforming",
         "microphone array",
     ],
-    python_requires=">=3.10,<3.13",
+    python_requires=">=3.6,<3.13",
     packages=find_packages(include=["acoular", "acoular.*"]),
     include_package_data=True,
     install_requires=[
