@@ -63,6 +63,7 @@ from .grids import (
     PolySector,
     RectGrid,
     RectGrid3D,
+    PolarGrid,
     RectSector,
     RectSector3D,
     Sector,

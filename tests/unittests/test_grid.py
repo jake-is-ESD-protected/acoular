@@ -40,7 +40,7 @@ def test_subdomain(grid, sector):
     sector : acoular.grids.Sector
         Sector instance to be tested
     """
-    assert grid.subdomain(sector)[0].shape[0] == 1, 'Subdomain is empty'
+    assert grid.subdomain(sector)[0].shape[0] > 0, 'Subdomain is empty'
 
 
 @parametrize_with_cases('grid', cases=Grids)

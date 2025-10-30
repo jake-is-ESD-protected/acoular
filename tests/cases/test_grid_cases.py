@@ -23,6 +23,7 @@ GRIDS_SKIP_DEFAULT = [
     ac.Grid,
     ac.RectGrid,
     ac.RectGrid3D,
+    ac.PolarGrid,
     ac.LineGrid,
     ac.ImportGrid,
     ac.MergeGrid,
@@ -52,6 +53,9 @@ class Grids:
 
     def case_RectGrid3D(self):
         return ac.RectGrid3D(x_min=-1, x_max=1, y_min=-1, y_max=1, z_min=1, z_max=1, increment=1)
+    
+    def case_PolarGrid(self):
+        return ac.PolarGrid(r_min=0., r_max=2, theta_min=0., theta_max=360., z=1., r_increment=1, theta_increment=90.)
 
     def case_LineGrid(self):
         return ac.LineGrid(loc=(-1, 0, 1), length=2, num_points=3)

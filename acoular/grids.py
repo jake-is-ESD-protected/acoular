@@ -355,13 +355,13 @@ class Grid(ABCHasStrictTraits):
 
         Notes
         -----
-        The :func:`numpy.where` method is used to determine the the indices.
+        The :func:`numpy.where` method is used to determine the indices.
         """
         xpos = self.pos
         # construct grid-shaped array with "True" entries where sector is
         xyi = sector.contains(xpos).reshape(self.shape)
         # return indices of "True" entries
-        return np.where(xyi)
+        return np.nonzero(xyi)
 
     def export_gpos(self, filename):
         """
@@ -431,6 +431,50 @@ class Grid(ABCHasStrictTraits):
                 )
                 f.write(pos_str)
             f.write('</Grid>')
+
+    @classmethod
+    def cartesian_to_polar(cls, x, y):
+        """
+        Convert Cartesian coordinates to polar coordinates relative to grid origin.
+
+        Parameters
+        ----------
+        x : float
+            x-coordinate
+        y : float
+            y-coordinate
+
+        Returns
+        -------
+        tuple
+            (radius, angle_deg) where angle is in degrees [0, 360)
+        """
+        radius = np.sqrt(x**2 + y**2)
+        angle_rad = np.arctan2(y, x)
+        angle_deg = np.rad2deg(angle_rad) % 360  # Convert to degrees and wrap to [0, 360)
+        return radius, angle_deg
+
+    @classmethod
+    def polar_to_cartesian(cls, radius, angle_deg):
+        """
+        Convert polar coordinates to Cartesian coordinates.
+
+        Parameters
+        ----------
+        radius : float
+            Radial distance
+        angle_deg : float
+            Angle in degrees
+
+        Returns
+        -------
+        tuple
+            (x, y) Cartesian coordinates
+        """
+        angle_rad = np.deg2rad(angle_deg)
+        x = radius * np.cos(angle_rad)
+        y = radius * np.sin(angle_rad)
+        return x, y
 
 
 @deprecated_alias({'gpos': 'pos'}, read_only=True, removal_version='25.10')
@@ -648,6 +692,203 @@ class RectGrid(Grid):
             return self.index(center[0], center[1])
         return np.array(xis), np.array(yis)
         # return np.arange(self.size)[inds]
+
+
+class PolarGrid(Grid):
+    """
+    Provides a 2D polar grid for beamforming results.
+
+    This grid is composed of points arranged in polar coordinates (radius, angle)
+    but exposes positions in Cartesian coordinates for compatibility.
+    """
+
+    #: The minimum radius (distance from origin). Default is ``0.1``.
+    r_min = Float(0., desc='minimum radius value')
+
+    #: The maximum radius (distance from origin). Default is ``1.0``.
+    r_max = Float(1.0, desc='maximum radius value')
+
+    #: The starting angle in degrees. Default is ``0``.
+    theta_min = Float(0.0, desc='minimum angle in degrees')
+
+    #: The ending angle in degrees. Default is ``360``.
+    theta_max = Float(360.0, desc='maximum angle in degrees')
+
+    #: The constant z-coordinate of the grid plane. Default is ``1.0``.
+    z = Float(1.0, desc='position on z-axis')
+
+    #: The radial increment (step size). Default is ``0.5``.
+    r_increment = Float(0.5, desc='radial step size')
+
+    #: The angular increment in degrees. Default is ``90``.
+    theta_increment = Float(90.0, desc='angular step size in degrees')
+
+    #: Number of grid points along radial direction. (read-only)
+    nrsteps = Property(desc='number of grid points along radial direction')
+
+    #: Number of grid points along angular direction. (read-only)
+    nthetasteps = Property(desc='number of grid points along angular direction')
+
+    #: The grid's extension in :obj:`matplotlib.pyplot.imshow` compatible form. (read-only)
+    extent = Property(desc='grid extent as (x_min, x_max, y_min, y_max)')
+
+    #: A unique identifier for the grid, based on its properties. (read-only)
+    digest = Property(
+        depends_on=['r_min', 'r_max', 'theta_min', 'theta_max', 'z',
+                   'r_increment', 'theta_increment'],
+    )
+
+    @property_depends_on(['nrsteps', 'nthetasteps'])
+    def _get_size(self):
+        return self.nrsteps * self.nthetasteps
+
+    @property_depends_on(['nrsteps', 'nthetasteps'])
+    def _get_shape(self):
+        return (self.nrsteps, self.nthetasteps)
+
+    @property_depends_on(['r_min', 'r_max', 'r_increment'])
+    def _get_nrsteps(self):
+        i = abs(self.r_increment)
+        if i != 0:
+            return int(round((abs(self.r_max - self.r_min) + i) / i))
+        return 1
+
+    @property_depends_on(['theta_min', 'theta_max', 'theta_increment'])
+    def _get_nthetasteps(self):
+        i = abs(self.theta_increment)
+        if i != 0:
+            angle_range = abs(self.theta_max - self.theta_min)
+            if angle_range >= 360:
+                angle_range = 360
+            return int(round(angle_range / i))
+        return 1
+
+    @cached_property
+    def _get_digest(self):
+        return digest(self)
+
+    @property_depends_on(['r_min', 'r_max', 'theta_min', 'theta_max',
+                         'r_increment', 'theta_increment', 'z'])
+    def _get_pos(self):
+        radii = np.linspace(self.r_min, self.r_max, self.nrsteps)
+        angles_deg = np.linspace(self.theta_min, self.theta_max, self.nthetasteps, endpoint=False)
+        unique_mask = np.where(radii == 0)
+        rs, thetas = np.meshgrid(radii, angles_deg, indexing='ij')
+        x, y = self.polar_to_cartesian(rs, thetas)
+        z = np.full_like(x, self.z)
+        bpos = np.array([x, y, z])
+        bpos.resize((3, self.size))
+        return bpos
+
+    @property_depends_on(['r_min', 'r_max', 'theta_min', 'theta_max',
+                         'r_increment', 'theta_increment', 'z'])
+    def _get_extent(self):
+        """
+        Return the grid's bounding box in Cartesian coordinates.
+
+        Returns
+        -------
+        tuple
+            (x_min, x_max, y_min, y_max) representing the grid's extent.
+        """
+        pos = self.pos
+        x_min, x_max = np.min(pos[0, :]), np.max(pos[0, :])
+        y_min, y_max = np.min(pos[1, :]), np.max(pos[1, :])
+        return (x_min, x_max, y_min, y_max)
+
+    def get_polar_coordinates(self):
+        """
+        Return the grid positions in polar coordinates.
+
+        Returns
+        -------
+        tuple
+            (radii, angles_deg) where radii is 1D array of radial distances
+            and angles_deg is 1D array of angles in degrees.
+        """
+        radii = np.linspace(self.r_min, self.r_max, self.nrsteps)
+        angles_deg = np.linspace(self.theta_min, self.theta_max, self.nthetasteps, endpoint=False)
+        return radii, angles_deg
+
+    def index(self, x, y):
+        """
+        Find the indices of a grid point near a given Cartesian coordinate.
+
+        Parameters
+        ----------
+        x : float
+            The x coordinate of interest.
+        y : float
+            The y coordinate of interest.
+
+        Returns
+        -------
+        tuple
+            (r_index, theta_index) indices corresponding to the nearest grid point.
+
+        Raises
+        ------
+        ValueError
+            If the coordinates are outside the grid boundaries.
+        """
+        radius, angle_deg = self.cartesian_to_polar(x, y)
+        if radius < self.r_min or radius > self.r_max:
+            msg = 'radius out of range'
+            raise ValueError(msg)
+        angle_deg = angle_deg % 360
+        if self.theta_min <= self.theta_max:
+            if angle_deg < self.theta_min or angle_deg > self.theta_max:
+                msg = 'angle out of range'
+                raise ValueError(msg)
+        else:
+            if not (angle_deg >= self.theta_min or angle_deg <= self.theta_max):
+                msg = 'angle out of range'
+                raise ValueError(msg)
+        radii, angles_deg = self.get_polar_coordinates()
+        r_idx = np.argmin(np.abs(radii - radius))
+        theta_idx = np.argmin(np.abs(angles_deg - angle_deg))
+        return r_idx, theta_idx
+
+    def indices(self, *r):
+        """
+        Find the indices of a subdomain in the grid.
+
+        Supports circular and annular subdomains in polar coordinates.
+
+        Parameters
+        ----------
+        r : tuple
+            Defines the subdomain shape:
+                - If 2 values: (center_radius, radius) for a circle
+                - If 3 values: (center_x, center_y, radius) for a circle in Cartesian
+                - If 4 values: (inner_radius, outer_radius, start_angle, end_angle) annular sector
+
+        Returns
+        -------
+        tuple
+            A 2-tuple of arrays of indices corresponding to the subdomain.
+        """
+        if len(r) == 2:  # (center_radius, radius) - circular in polar
+            center_r, radius = r
+            radii, angles_deg = self.get_polar_coordinates()
+            r_inds = np.where((radii >= center_r - radius) & (radii <= center_r + radius))[0]
+            theta_inds = np.arange(self.nthetasteps)
+            return r_inds, theta_inds
+        if len(r) == 3:  # (center_x, center_y, radius) - circular in Cartesian
+            center_x, center_y, radius = r
+            center_r, center_theta = self.cartesian_to_polar(center_x, center_y)
+            return self.indices(center_r, radius)
+        if len(r) == 4:  # (inner_r, outer_r, start_angle, end_angle) - annular sector
+            inner_r, outer_r, start_angle, end_angle = r
+            radii, angles_deg = self.get_polar_coordinates()
+            r_inds = np.where((radii >= inner_r) & (radii <= outer_r))[0]
+            if start_angle <= end_angle:
+                theta_inds = np.where((angles_deg >= start_angle) & (angles_deg <= end_angle))[0]
+            else:
+                theta_inds = np.where((angles_deg >= start_angle) | (angles_deg <= end_angle))[0]
+            return r_inds, theta_inds
+        msg = 'Invalid number of arguments for polar subdomain'
+        raise ValueError(msg)
 
 
 class RectGrid3D(RectGrid):
